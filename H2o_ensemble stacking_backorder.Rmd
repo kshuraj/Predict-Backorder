@@ -1,0 +1,123 @@
+```{r}
+nfolds = 5
+# Train & Cross-validate a GBM
+my_gbm <- h2o.gbm(x = x,
+                  y = y,
+                  training_frame = train.h2o,
+                  distribution = "bernoulli",
+                  max_depth = 3,
+                  min_rows = 2,
+                  learn_rate = 0.3,
+                  nfolds = nfolds,
+                  fold_assignment = "Modulo",
+                  keep_cross_validation_predictions = TRUE,
+                  seed = 1)
+```
+
+```{r}
+# Train & Cross-validate a RF
+my_rf <- h2o.randomForest(x = x,
+                          y = y,
+                          training_frame = train.h2o,
+                          nfolds = nfolds,
+                          fold_assignment = "Modulo",
+                          keep_cross_validation_predictions = TRUE,
+                          seed = 1)
+
+system.time(my_rf)
+```
+
+```{r}
+# Train & Cross-validate a DNN
+my_dl <- h2o.deeplearning(x = x,
+                          y = y,
+                          training_frame = train.h2o,
+                          l1 = 0.001,
+                          l2 = 0.001,
+                          hidden = c(20, 20, 20),
+                          nfolds = nfolds,
+                          fold_assignment = "Modulo",
+                          keep_cross_validation_predictions = TRUE,
+                          seed = 1)
+```
+
+
+# Train & Cross-validate a (shallow) XGB-GBM
+my_xgb1 <- h2o.xgboost(x = x,
+                       y = y,
+                       training_frame = train,
+                       distribution = "bernoulli",
+                       ntrees = 50,
+                       max_depth = 3,
+                       min_rows = 2,
+                       learn_rate = 0.2,
+                       nfolds = nfolds,
+                       fold_assignment = "Modulo",
+                       keep_cross_validation_predictions = TRUE,
+                       seed = 1)
+
+
+
+# Train & Cross-validate another (deeper) XGB-GBM
+system.time(   my_xgb2 <- h2o.xgboost(x = x,
+                       y = y,
+                       training_frame = train.h2o,
+                       distribution = "bernoulli",
+                       ntrees = 50,
+                       max_depth = 8,
+                       min_rows = 1,
+                       learn_rate = 0.1,
+                       sample_rate = 0.7,
+                       col_sample_rate = 0.9,
+                       nfolds = nfolds,
+                       fold_assignment = "Modulo",
+                       keep_cross_validation_predictions = TRUE,
+                       seed = 1)
+)
+
+
+```{r}
+base_models <- list(my_gbm@model_id, my_rf@model_id,my_dl@model_id)
+
+```
+
+```{r}
+ensemble <- h2o.stackedEnsemble(x = x,
+                                y = y,
+                                training_frame = train.h2o,
+                                base_models = base_models)
+
+```
+
+
+```{r}
+perf <- h2o.performance(ensemble, newdata = test.h2o)
+
+predict.en <- as.data.frame(h2o.predict(ensemble, test.h2o))
+
+```
+
+```{r}
+get_auc <- function(mm) h2o.auc(h2o.performance(h2o.getModel(mm), newdata = test.h2o))
+baselearner_aucs <- sapply(base_models, get_auc)
+baselearner_best_auc_test <- max(baselearner_aucs)
+ensemble_auc_test <- h2o.auc(perf)
+```
+
+```{r}
+print(sprintf("Best Base-learner Test AUC:  %s", baselearner_best_auc_test))
+print(sprintf("Ensemble Test AUC:  %s", ensemble_auc_test))
+```
+
+```{r}
+confusionMatrix(predict.en$predict ,test$went_on_backorder,positive = "Yes")
+
+```
+
+```{r}
+library(ROCR)
+
+#plot Roc curve
+plot(perf, col=rainbow(10), colorize=T)
+```
+

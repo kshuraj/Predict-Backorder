@@ -1,0 +1,301 @@
+---
+title: "intern"
+author: "KEERTHI.R"
+date: "January 31, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list = ls())
+#install.packages("")
+library(ggplot2)
+library(GGally)
+library(moments)
+library(car)
+library(DMwR)
+library(caret)
+library(MASS)
+library(glmnet)
+library(doParallel)
+library(rpart)
+library(randomForest)
+library(xgboost)
+```
+
+
+
+
+
+```{r}
+train <- read.csv("train.csv",header = T,stringsAsFactors = F,na.strings = c("NA",""," "))
+test <- read.csv("test.csv",header = T,stringsAsFactors = F,na.strings = c("NA",""," "))
+```
+
+#finding rows with na
+```{r}
+df = train[is.na(train$went_on_backorder),]
+sum(is.na(df))
+train = train[-c(	1687861),]
+rm(df)
+
+df = test[is.na(test$went_on_backorder),]
+test = test[-c(242076),]
+rm(df)
+```
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+#PCA
+```{r}
+pcamodel <- preProcess(train_data[,!names(train_data)%in% c("went_on_backorder")],method="pca",pcaComp=3)
+
+train_pca=predict(pcamodel,train_data)
+test_pca=predict(pcamodel,test_data)
+
+
+
+colSums(is.na(train_pca))      
+colSums(is.na(test_pca)) 
+
+train_pca<-knnImputation(train_pca[,!names(train_pca)%in% c("went_on_backorder")],k=5,scale=T)
+
+
+
+train_pca= na.omit(train_pca)
+
+```
+
+```{r}
+df$type = NULL
+df$sku = NULL
+
+```
+
+```{r}
+dim(df)
+df$went_on_backorder <- as.factor(as.character(df$went_on_backorder))
+
+str(df)
+
+```
+
+
+
+```{r}
+for(i in 1:length(colnames(df))-1)  
+{
+  if(class(df[,i ]) == "character")  
+  {
+    df[,i] <- as.numeric(as.factor(df[,i]))
+  }
+}
+```
+
+```{r}
+df$sku <- NULL
+df_imputed <- centralImputation(df)
+
+colSums(is.na(df_imputed))
+
+```
+
+
+
+```{r}
+#str(df_imputed)
+```
+
+
+
+
+```{r}
+#library(plyr)
+#count(df_imputed$went_on_backorder)
+```
+
+#to find class imbalance
+```{r}
+prop.table(table(df_imputed$went_on_backorder))
+
+barplot(prop.table(table(df_imputed$went_on_backorder)),
+        col = rainbow(2),
+        ylim = c(0,1),
+        main = "Class Distribution")
+```
+
+```{r}
+train_model <- createDataPartition(df_imputed$went_on_backorder, p=0.7, list = F)
+
+train_data <- df[train_model,]
+
+test_data <- df[-train_model,]
+
+
+#rm(train)
+
+```
+#over sampaling
+```{r}
+library(ROSE)
+under <- ovun.sample(went_on_backorder~., data = train_data, method = "under")$data
+table(train_data$went_on_backorder)
+table(under$went_on_backorder)
+```
+
+
+```{r}
+str(df_imputed)
+
+```
+
+```{r}
+specificity_train <- cm_train[1,1]/sum(cm_train[1, ])
+```
+
+```{r}
+sensitivity_train <- cm_train[2,2]/sum(cm_train[2, ])
+```
+
+
+```{r}
+pred.rf1_val <- predict(rf1,test_data)
+
+cm_test <- table("actual" = test_data$went_on_backorder, "predicted" = pred.rf1_val)
+
+specificity_test <- cm_test[1,1]/sum(cm_test[1, ])
+
+sensitivity_test <- cm_test[2,2]/sum(cm_test[2, ])
+
+```
+```{r}
+
+```
+
+
+#logistic
+```{r}
+model1 <- glm(went_on_backorder~., data = train, family = binomial)
+summary(model1)
+```
+
+```{r}
+library(ROCR)
+prob_train <- predict(model1, type = "response")
+
+pred <- prediction(prob_train, over$went_on_backorder)
+pref <- performance(pred, measure = "tpr", x.measure = "fpr")
+
+```
+
+
+```{r}
+plot(pref, col= rainbow(10), colorize=T, print.cutoffs.at=seq(0,1,0.1))
+```
+
+
+```{r}
+#memory.limit(4000)
+prob_test <- predict(model1, over, type = "response")
+preds_test <- ifelse(prob_test > 0.8 , "YES", "NO")
+
+#actual_test_val <- ifelse(over$went_on_backorder=="0.5","YES","NO")
+actual_test_val <- over$went_on_backorder
+
+#confusionMatrix(preds_test, over$went_on_backorder, positive = "YES")
+conf_matrix <- table(actual_test_val,preds_test)
+
+print(conf_matrix)
+```
+
+
+#random forest
+```{r}
+rf1 <- randomForest(went_on_backorder~.,data=df_imputed,keep.forest= TRUE, ntree = 50)
+#sum(is.na(train_data))
+#train_data <- na.omit(train_data)
+## Check the error on the validation data
+pred.rf1_val <- predict(rf1,train_data)
+print(rf1)
+```
+
+```{r}
+pred_train <- predict()
+
+cm_train <- table("actual" = train_data$went_on_backorder, "predicted" = pred.rf1_val)
+```
+
+
+
+```{r}
+
+
+```
+
+#randomforest
+```{r}
+set.seed(123)
+rows <- createDataPartition(df_imputed$went_on_backorder,p=0.7,list = F)
+train_data <- df_imputed[rows,]
+val_data <- df_imputed[-rows,]
+
+
+rf1 <- randomForest(went_on_backorder~.,data=train_data,keep.forest= TRUE, ntree = 50)
+pred.rf1_val <- predict(rf1,train_data)
+
+cm_train <- table("actual" = train_data$went_on_backorder, "predicted" = pred.rf1_val)
+
+
+specificity_train <- cm_train[1,1]/sum(cm_train[1, ])
+
+sensitivity_train <- cm_train[2,2]/sum(cm_train[2, ])
+
+```
+
+
+
+```{r}
+pred.rf1_val1 <- predict(rf1,val_data)
+
+cm_test <- table("actual" = val_data$went_on_backorder, "predicted" = pred.rf1_val1)
+
+specificity_test <- cm_test[1,1]/sum(cm_test[1, ])
+
+sensitivity_test <- cm_test[2,2]/sum(cm_test[2, ])
+```
+
+```{r}
+sum(is.na(df))
+library(imputeMissings)
+
+```
+
+```{r}
+library(C50)
+
+#Tree based model
+c5_tree <- C5.0(went_on_backorder ~ . , train_data)
+
+C5imp(c5_tree, metric = "usage")
+
+c5_rules <- C5.0(went_on_backorder ~ . , train_data, rules = T)
+summary(c5_rules)
+```
+
+```{r}
+preds <- predict(c5_tree, val_data)
+library(caret)
+
+confusionMatrix(preds, val_data$went_on_backorder)
+```
+
+
